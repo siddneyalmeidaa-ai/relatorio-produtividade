@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Terminal - Relatório de Produtividade</title>
+    <style>
+        body { background-color: #0d1117; color: #c9d1d9; font-family: monospace; padding: 20px; }
+        .terminal { background: #161b22; border: 1px solid #30363d; padding: 20px; border-radius: 6px; }
+        input[type="file"] { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; padding: 10px; border-radius: 4px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #30363d; padding: 8px; text-align: center; }
+        th { background: #3b1443; color: white; }
+    </style>
+</head>
+<body>
+    <div class="terminal">
+        <h2>TERMINAL DE PRODUTIVIDADE - PROJETO FRAJOLA</h2>
+        <p>Anexe a planilha CSV para processamento local na interface:</p>
+        <input type="file" id="csvFile" accept=".csv">
+        <div id="output"></div>
+    </div>
+
+    <script>
+        document.getElementById('csvFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const text = event.target.result;
+                    document.getElementById('output').innerHTML = '<p>Arquivo carregado com sucesso no terminal!</p>';
+                };
+                reader.readAsText(file);
+            }
+        });
+    </script>
+</body>
+</html>
