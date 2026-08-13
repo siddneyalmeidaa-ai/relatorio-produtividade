@@ -96,7 +96,7 @@ if uploaded_file is not None:
 
             summary_df = pd.DataFrame(summary_data)
             
-            summary_df = summary_df.sort_values(by=['CONVERSAO_NUM', 'PROMESSAS', 'CPCA', 'CONTATO'], ascending=[False, False, False, False]).reset_index(drop=True)
+            summary_df = summary_df.sort_values(by=['PROMESSAS', 'CONVERSAO_NUM', 'CPCA', 'CONTATO'], ascending=[False, False, False, False]).reset_index(drop=True)
 
             total_contato = summary_df['CONTATO'].sum()
             total_cpc = summary_df['CPC'].sum()
