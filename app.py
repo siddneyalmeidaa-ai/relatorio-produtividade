@@ -16,15 +16,20 @@ if uploaded_file is not None:
     except Exception:
         df = pd.read_csv(uploaded_file, encoding='latin1', sep=None, engine='python')
 
+    # Remove espaços extras dos nomes das colunas para evitar erros de leitura
+    df.columns = df.columns.str.strip()
+
+    st.write("Colunas encontradas no seu arquivo:", list(df.columns))
+
     coluna_op = None
     for col in df.columns:
-        if 'operador' in col.lower() or 'nome' in col.lower():
+        if 'operador' in col.lower() or 'nome' in col.lower() or 'usuario' in col.lower():
             coluna_op = col
             break
 
     coluna_ocorrencia = None
     for col in df.columns:
-        if 'ocorrência' in col.lower() or 'ocorrencia' in col.lower():
+        if 'ocorrência' in col.lower() or 'ocorrencia' in col.lower() or 'status' in col.lower() or 'historico' in col.lower():
             coluna_ocorrencia = col
             break
 
@@ -48,9 +53,9 @@ if uploaded_file is not None:
         summary_data = []
         for op, group in df.groupby(coluna_op):
             contato = len(group)
-            cpc = group[coluna_ocorrencia].isin(cpc_types).sum()
-            cpca = group[coluna_ocorrencia].isin(promessa_types + ['Alega Pagamento', 'Preventivo - Com Sucesso']).sum()
-            promessas = group[coluna_ocorrencia].isin(promessa_types).sum()
+            cpc = group[coluna_ocorrencia].astype(str).isin(cpc_types).sum()
+            cpca = group[coluna_ocorrencia].astype(str).isin(promessa_types + ['Alega Pagamento', 'Preventivo - Com Sucesso']).sum()
+            promessas = group[coluna_ocorrencia].astype(str).isin(promessa_types).sum()
             
             valor = promessas * 209.69 if promessas > 0 else 0.0
             ticket_medio = 209.69 if promessas > 0 else 0.0
