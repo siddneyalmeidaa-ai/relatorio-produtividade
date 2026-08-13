@@ -2,11 +2,16 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import io
+from datetime import datetime
 
 st.set_page_config(page_title="Relatório de Produtividade", layout="wide")
 
 st.title("RELATÓRIO DE PRODUTIVIDADE POR OPERADOR - CONSOLIDADO")
 st.write("Faça o upload do arquivo CSV gerado pelo sistema para processar os dados em tempo real.")
+
+# Barra lateral para filtros e opções
+st.sidebar.header("Painel de Controle")
+data_relatorio = st.sidebar.date_input("Data do Relatório", datetime.now())
 
 uploaded_file = st.file_uploader("Anexar planilha CSV", type=["csv"])
 
@@ -98,12 +103,34 @@ if uploaded_file is not None:
             
             summary_df = summary_df.sort_values(by=['PROMESSAS', 'CONVERSAO_NUM', 'CPCA', 'CONTATO'], ascending=[False, False, False, False]).reset_index(drop=True)
 
+            # Filtro por operador na barra lateral
+            st.sidebar.subheader("Filtros")
+            operadores_disponiveis = summary_df['NOME'].tolist()
+            operadores_selecionados = st.sidebar.multiselect("Selecionar Operadores", operadores_disponiveis, default=operadores_disponiveis)
+
+            if operadores_selecionados:
+                summary_df = summary_df[summary_df['NOME'].isin(operadores_selecionados)].reset_index(drop=True)
+
             total_contato = summary_df['CONTATO'].sum()
             total_cpc = summary_df['CPC'].sum()
             total_cpca = summary_df['CPCA'].sum()
             total_promessas = summary_df['PROMESSAS'].sum()
             total_valor = total_promessas * 209.69
             total_conversao = (total_promessas / total_cpca * 100) if total_cpca > 0 else 0.0
+
+            # Indicadores de Destaque (KPIs) no topo
+            st.markdown("### Indicadores Gerais")
+            kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+            kpi1.metric("Total de Promessas", f"{total_promessas}")
+            kpi2.metric("Valor Total Negociado", f"R$ {total_valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+            kpi3.metric("Conversão Média", f"{total_conversao:.1f}%")
+            if not summary_df.empty:
+                melhor_op = summary_df.iloc[0]['NOME']
+                kpi4.metric("Destaque em Promessas", melhor_op.split()[0])
+            else:
+                kpi4.metric("Destaque em Promessas", "-")
+
+            st.markdown("---")
 
             cols_to_display = ['NOME', 'LOGIN', 'CONTATO', 'CPC', 'CPCA', 'PROMESSAS', 'VALOR', 'TICKET MÉDIO', 'CONVERSÃO']
             
@@ -151,7 +178,8 @@ if uploaded_file is not None:
                     cell.set_facecolor('#F8FAFC' if k[0] % 2 == 0 else '#FFFFFF')
                     cell.set_text_props(color='#1E293B', fontsize=9)
 
-            plt.title('RELATÓRIO DE PRODUTIVIDADE POR OPERADOR - CONSOLIDADO', fontsize=15, weight='bold', pad=30, color='#1E293B')
+            data_str_title = data_relatorio.strftime('%d/%m/%Y')
+            plt.title(f'RELATÓRIO DE PRODUTIVIDADE POR OPERADOR - CONSOLIDADO ({data_str_title})', fontsize=15, weight='bold', pad=30, color='#1E293B')
             plt.tight_layout()
             
             st.pyplot(fig)
@@ -160,10 +188,11 @@ if uploaded_file is not None:
             fig.savefig(buf, format="png", bbox_inches='tight')
             buf.seek(0)
             
+            data_str_file = data_relatorio.strftime('%d_%m_%Y')
             st.download_button(
                 label="Baixar Relatório em Imagem (PNG)",
                 data=buf,
-                file_name="tabela_produtividade_final.png",
+                file_name=f"relatorio_produtividade_{data_str_file}.png",
                 mime="image/png"
             )
         else:
@@ -172,4 +201,4 @@ if uploaded_file is not None:
         st.error("Erro ao ler o arquivo CSV.")
 else:
     st.info("Aguardando o envio do arquivo CSV para iniciar o processamento...")
-            
+    
