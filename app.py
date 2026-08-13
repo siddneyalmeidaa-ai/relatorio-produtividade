@@ -9,9 +9,11 @@ st.set_page_config(page_title="Relatório de Produtividade", layout="wide")
 st.title("RELATÓRIO DE PRODUTIVIDADE POR OPERADOR - CONSOLIDADO")
 st.write("Faça o upload do arquivo CSV gerado pelo sistema para processar os dados em tempo real.")
 
-# Barra lateral para filtros e opções
 st.sidebar.header("Painel de Controle")
 data_relatorio = st.sidebar.date_input("Data do Relatório", datetime.now())
+
+# Nova sugestão: Meta de promessas customizável
+meta_promessas = st.sidebar.number_input("Meta de Promessas por Operador", min_value=1, value=3, step=1)
 
 uploaded_file = st.file_uploader("Anexar planilha CSV", type=["csv"])
 
@@ -103,7 +105,6 @@ if uploaded_file is not None:
             
             summary_df = summary_df.sort_values(by=['PROMESSAS', 'CONVERSAO_NUM', 'CPCA', 'CONTATO'], ascending=[False, False, False, False]).reset_index(drop=True)
 
-            # Filtro por operador na barra lateral
             st.sidebar.subheader("Filtros")
             operadores_disponiveis = summary_df['NOME'].tolist()
             operadores_selecionados = st.sidebar.multiselect("Selecionar Operadores", operadores_disponiveis, default=operadores_disponiveis)
@@ -118,7 +119,6 @@ if uploaded_file is not None:
             total_valor = total_promessas * 209.69
             total_conversao = (total_promessas / total_cpca * 100) if total_cpca > 0 else 0.0
 
-            # Indicadores de Destaque (KPIs) no topo
             st.markdown("### Indicadores Gerais")
             kpi1, kpi2, kpi3, kpi4 = st.columns(4)
             kpi1.metric("Total de Promessas", f"{total_promessas}")
@@ -129,6 +129,17 @@ if uploaded_file is not None:
                 kpi4.metric("Destaque em Promessas", melhor_op.split()[0])
             else:
                 kpi4.metric("Destaque em Promessas", "-")
+
+            st.markdown("---")
+
+            # Sugestão 3: Ranking "Top 3" Automatizado para WhatsApp
+            st.subheader("Flash Report para o WhatsApp (Top 3)")
+            if len(summary_df) >= 3:
+                top1 = summary_df.iloc[0]
+                top2 = summary_df.iloc[1]
+                top3 = summary_df.iloc[2]
+                whatsapp_text = f"🏆 *RANKING DE PRODUTIVIDADE* 🏆\n📅 Data: {data_relatorio.strftime('%d/%m/%Y')}\n\n🥇 1º - {top1['NOME']} ({top1['PROMESSAS']} promessas | {top1['CONVERSÃO']} conv.)\n🥈 2º - {top2['NOME']} ({top2['PROMESSAS']} promessas | {top2['CONVERSÃO']} conv.)\n🥉 3º - {top3['NOME']} ({top3['PROMESSAS']} promessas | {top3['CONVERSÃO']} conv.)\n\n🎯 *Total da Equipe:* {total_promessas} promessas negociadas!"
+                st.code(whatsapp_text, language="text")
 
             st.markdown("---")
 
@@ -150,7 +161,7 @@ if uploaded_file is not None:
             display_df = pd.concat([display_df, pd.DataFrame([total_row])], ignore_index=True)
 
             st.subheader("Visualização dos Dados Consolidados")
-            st.dataframe(display_df, use_container_width=True)
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
 
             fig, ax = plt.subplots(figsize=(16, len(display_df) * 0.45 + 2.5), dpi=300)
             ax.axis('off')
@@ -175,8 +186,20 @@ if uploaded_file is not None:
                     cell.set_facecolor('#E2E8F0')
                     cell.set_text_props(color='#0F172A', weight='bold', fontsize=9.5)
                 else:
-                    cell.set_facecolor('#F8FAFC' if k[0] % 2 == 0 else '#FFFFFF')
-                    cell.set_text_props(color='#1E293B', fontsize=9)
+                    # Sugestão 1 e 3 integradas: Destaca em verde claro quem bateu a meta de promessas
+                    op_nome_cel = display_df.iloc[k[0]-1]['NOME'] if k[0] - 1 < len(summary_df) else ""
+                    is_meta_batida = False
+                    if op_nome_cel and op_nome_cel != 'TOTAL':
+                        row_match = summary_df[summary_df['NOME'] == op_nome_cel]
+                        if not row_match.empty and row_match.iloc[0]['PROMESSAS'] >= meta_promessas:
+                            is_meta_batida = True
+
+                    if is_meta_batida and k[1] == 5: # Coluna de Promessas
+                        cell.set_facecolor('#DCFCE7') # Verde bem suave
+                        cell.set_text_props(color='#166534', weight='bold', fontsize=9)
+                    else:
+                        cell.set_facecolor('#F8FAFC' if k[0] % 2 == 0 else '#FFFFFF')
+                        cell.set_text_props(color='#1E293B', fontsize=9)
 
             data_str_title = data_relatorio.strftime('%d/%m/%Y')
             plt.title(f'RELATÓRIO DE PRODUTIVIDADE POR OPERADOR - CONSOLIDADO ({data_str_title})', fontsize=15, weight='bold', pad=30, color='#1E293B')
@@ -195,10 +218,24 @@ if uploaded_file is not None:
                 file_name=f"relatorio_produtividade_{data_str_file}.png",
                 mime="image/png"
             )
+
+            # Sugestão 4: Gráfico de Ocorrências / Negativas mais Frequentes
+            st.markdown("---")
+            st.subheader("Análise de Tipos de Ocorrências na Operação")
+            ocorrencias_counts = df[coluna_ocorrencia].value_counts().head(8)
+            fig_occ, ax_occ = plt.subplots(figsize=(10, 4), dpi=300)
+            ocorrencias_counts.plot(kind='barh', ax=ax_occ, color='#4A154B')
+            ax_occ.invert_yaxis()
+            ax_occ.set_title("Top Ocorrências Registradas", fontsize=12, weight='bold', color='#1E293B')
+            ax_occ.set_xlabel("Quantidade")
+            ax_occ.set_ylabel("")
+            plt.tight_layout()
+            st.pyplot(fig_occ)
+
         else:
             st.error("Cabeçalho real não identificado.")
     else:
         st.error("Erro ao ler o arquivo CSV.")
 else:
     st.info("Aguardando o envio do arquivo CSV para iniciar o processamento...")
-    
+                                      
