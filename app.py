@@ -80,7 +80,7 @@ if uploaded_file is not None:
                 
                 conversao = (promessas / cpca * 100) if cpca > 0 else 0.0
                 
-                op_str = str(op)
+                op_str = str(op).encode('latin1', errors='ignore').decode('utf-8', errors='ignore')
                 summary_data.append({
                     'NOME': op_str,
                     'LOGIN': op_str.split()[0],
