@@ -12,28 +12,45 @@ uploaded_file = st.file_uploader("Anexar planilha CSV", type=["csv"])
 
 if uploaded_file is not None:
     try:
-        df = pd.read_csv(uploaded_file, sep=None, engine='python')
+        df = pd.read_csv(uploaded_file, sep=None, engine='python', header=None)
     except Exception:
-        df = pd.read_csv(uploaded_file, encoding='latin1', sep=None, engine='python')
+        df = pd.read_csv(uploaded_file, encoding='latin1', sep=None, engine='python', header=None)
 
-    # Remove espaços extras dos nomes das colunas para evitar erros de leitura
-    df.columns = df.columns.str.strip()
+    header_row_idx = None
+    for idx, row in df.iterrows():
+        row_str = " ".join(str(val) for val in row.values).lower()
+        if 'operador' in row_str or 'nome' in row_str or 'login' in row_str or 'usuário' in row_str or 'usuario' in row_str:
+            header_row_idx = idx
+            break
 
-    st.write("Colunas encontradas no seu arquivo:", list(df.columns))
+    if header_row_idx is not None:
+        df.columns = df.iloc[header_row_idx]
+        df = df.iloc[header_row_idx + 1:].reset_index(drop=True)
+    else:
+        df.columns = df.iloc[0]
+        df = df.iloc[1:].reset_index(drop=True)
+
+    df.columns = [str(col).strip() for col in df.columns]
+
+    st.write("Colunas detectadas após ajuste:", list(df.columns))
 
     coluna_op = None
     for col in df.columns:
-        if 'operador' in col.lower() or 'nome' in col.lower() or 'usuario' in col.lower():
+        col_lower = str(col).lower()
+        if 'operador' in col_lower or 'nome' in col_lower or 'usuario' in col_lower or 'usuário' in col_lower:
             coluna_op = col
             break
 
     coluna_ocorrencia = None
     for col in df.columns:
-        if 'ocorrência' in col.lower() or 'ocorrencia' in col.lower() or 'status' in col.lower() or 'historico' in col.lower():
+        col_lower = str(col).lower()
+        if 'ocorrência' in col_lower or 'ocorrencia' in col_lower or 'status' in col_lower or 'historico' in col_lower or 'ação' in col_lower:
             coluna_ocorrencia = col
             break
 
     if coluna_op and coluna_ocorrencia:
+        df = df.dropna(subset=[coluna_op, coluna_ocorrencia])
+        
         promessa_types = [
             'Promessa A Vista Com Desconto',
             'Promessa A Vista Com Isencao de Juros e Multa',
@@ -142,7 +159,7 @@ if uploaded_file is not None:
             mime="image/png"
         )
     else:
-        st.error("O arquivo CSV enviado não possui as colunas necessárias de 'Operador' ou 'Ocorrência'. Verifique o cabeçalho da planilha.")
+        st.error(f"O cabeçalho correto não foi localizado automaticamente. Colunas encontradas: {list(df.columns)}")
 else:
     st.info("Aguardando o envio do arquivo CSV para iniciar o processamento...")
-    
+                
