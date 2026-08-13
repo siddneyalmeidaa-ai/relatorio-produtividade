@@ -77,7 +77,7 @@ if uploaded_file is not None:
                 
                 valor = promessas * 209.69 if promessas > 0 else 0.0
                 ticket_medio = 209.69 if promessas > 0 else 0.0
-                conversao = (promessas / contato * 100) if contato > 0 else 0.0
+                conversao = (promessas / cpc * 100) if cpc > 0 else 0.0
                 
                 op_str = str(op)
                 summary_data.append({
@@ -100,7 +100,7 @@ if uploaded_file is not None:
             total_cpca = summary_df['CPCA'].sum()
             total_promessas = summary_df['PROMESSAS'].sum()
             total_valor = total_promessas * 209.69
-            total_conversao = (total_promessas / total_contato * 100) if total_contato > 0 else 0.0
+            total_conversao = (total_promessas / total_cpc * 100) if total_cpc > 0 else 0.0
 
             total_row = {
                 'NOME': 'TOTAL',
@@ -160,10 +160,9 @@ if uploaded_file is not None:
                 mime="image/png"
             )
         else:
-            st.error(f"Cabeçalho real não identificado. Linhas iniciais encontradas no arquivo.")
-            st.write(df.head(10))
+            st.error(f"Cabeçalho real não identificado.")
     else:
         st.error("Erro ao ler o arquivo CSV.")
 else:
     st.info("Aguardando o envio do arquivo CSV para iniciar o processamento...")
-        
+                    
