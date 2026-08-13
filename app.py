@@ -57,7 +57,8 @@ if uploaded_file is not None:
 
         coluna_data = None
         for col in df.columns:
-            if 'data' in col.lower() or 'hora' in col.lower() or 'time' in col.lower():
+            col_lower = col.lower()
+            if 'data' in col_lower or 'hora' in col_lower or 'time' in col_lower or 'início' in col_lower or 'inicio' in col_lower:
                 coluna_data = col
                 break
 
@@ -137,7 +138,6 @@ if uploaded_file is not None:
 
             st.markdown("---")
 
-            # Sugestão 1: Alerta Automático de Auditoria (Omissão/Sabotagem)
             st.subheader("Auditoria de Operadores (Alto Contato e Zero Promessas)")
             audit_df = summary_df[(summary_df['CONTATO'] > 20) & (summary_df['PROMESSAS'] == 0)]
             if not audit_df.empty:
@@ -233,34 +233,80 @@ if uploaded_file is not None:
                 mime="image/png"
             )
 
-            # Sugestão 3: Análise de Turnos/Horários (se houver coluna de data/hora)
+            st.markdown("---")
+            st.subheader("Análise de Turnos / Horários")
+            
+            horarios_extraidos = False
             if coluna_data:
-                st.markdown("---")
-                st.subheader("Análise de Produtividade por Turno / Horário")
                 try:
-                    df['HORA_TEMP'] = pd.to_datetime(df[coluna_data], errors='coerce').dt.hour
-                    turno_counts = df.dropna(subset=['HORA_TEMP']).groupby(pd.cut(df['HORA_TEMP'], bins=[0, 12, 18, 24], labels=['Manhã (00h-12h)', 'Tarde (12h-18h)', 'Noite (18h-24h)'])).size()
-                    
-                    fig_turno, ax_turno = plt.subplots(figsize=(8, 3.5), dpi=300)
-                    turno_counts.plot(kind='bar', ax=ax_turno, color='#2D1B4E')
-                    ax_turno.set_title("Volume de Atendimentos por Período", fontsize=12, weight='bold', color='#1E293B')
-                    ax_turno.set_xlabel("")
-                    ax_turno.set_ylabel("Quantidade")
-                    plt.xticks(rotation=0)
-                    plt.tight_layout()
-                    st.pyplot(fig_turno)
+                    s_horas = pd.to_datetime(df[coluna_data], errors='coerce').dt.hour
+                    if s_horas.notna().sum() > 0:
+                        df['HORA_TEMP'] = s_horas
+                        turno_counts = df.dropna(subset=['HORA_TEMP']).groupby(
+                            pd.cut(df['HORA_TEMP'], bins=[-1, 11, 17, 24], labels=['Manhã (00h-11h)', 'Tarde (12h-17h)', 'Noite (18h-24h)'])
+                        ).size()
+                        
+                        fig_turno, ax_turno = plt.subplots(figsize=(8, 3.5), dpi=300)
+                        turno_counts.plot(kind='bar', ax=ax_turno, color='#2D1B4E')
+                        ax_turno.set_title("Volume de Atendimentos por Período", fontsize=12, weight='bold', color='#1E293B')
+                        ax_turno.set_xlabel("")
+                        ax_turno.set_ylabel("Quantidade")
+                        plt.xticks(rotation=0)
+                        plt.tight_layout()
+                        st.pyplot(fig_turno)
 
-                    buf_turno = io.BytesIO()
-                    fig_turno.savefig(buf_turno, format="png", bbox_inches='tight')
-                    buf_turno.seek(0)
-                    st.download_button(
-                        label="Baixar Gráfico de Turnos em Imagem (PNG)",
-                        data=buf_turno,
-                        file_name=f"grafico_turnos_{data_str_file}.png",
-                        mime="image/png"
-                    )
+                        buf_turno = io.BytesIO()
+                        fig_turno.savefig(buf_turno, format="png", bbox_inches='tight')
+                        buf_turno.seek(0)
+                        st.download_button(
+                            label="Baixar Gráfico de Turnos em Imagem (PNG)",
+                            data=buf_turno,
+                            file_name=f"grafico_turnos_{data_str_file}.png",
+                            mime="image/png"
+                        )
+                        horarios_extraidos = True
                 except Exception:
-                    st.info("Não foi possível processar os horários automaticamente desta base.")
+                    pass
+
+            if not horarios_extraidos:
+                st.info("A planilha atual não contém uma coluna de data/hora válida reconhecida automaticamente. Tentando extrair de qualquer coluna com formato de hora...")
+                
+                for col in df.columns:
+                    try:
+                        s_test = df[col].astype(str).str.extract(r'(\d{2}:\d{2})', expand=False)
+                        if s_test.notna().sum() > 0:
+                            s_horas = pd.to_datetime(s_test, format='%H:%M', errors='coerce').dt.hour
+                            if s_horas.notna().sum() > 0:
+                                df['HORA_TEMP'] = s_horas
+                                turno_counts = df.dropna(subset=['HORA_TEMP']).groupby(
+                                    pd.cut(df['HORA_TEMP'], bins=[-1, 11, 17, 24], labels=['Manhã (00h-11h)', 'Tarde (12h-17h)', 'Noite (18h-24h)'])
+                                ).size()
+                                
+                                fig_turno, ax_turno = plt.subplots(figsize=(8, 3.5), dpi=300)
+                                turno_counts.plot(kind='bar', ax=ax_turno, color='#2D1B4E')
+                                ax_turno.set_title(f"Volume por Período (Extraído de '{col}')", fontsize=12, weight='bold', color='#1E293B')
+                                ax_turno.set_xlabel("")
+                                ax_turno.set_ylabel("Quantidade")
+                                plt.xticks(rotation=0)
+                                plt.tight_layout()
+                                st.pyplot(fig_turno)
+
+                                buf_turno = io.BytesIO()
+                                fig_turno.savefig(buf_turno, format="png", bbox_inches='tight')
+                                buf_turno.seek(0)
+                                st.download_button(
+                                    label="Baixar Gráfico de Turnos em Imagem (PNG)",
+                                    data=buf_turno,
+                                    file_name=f"grafico_turnos_{data_str_file}.png",
+                                    mime="image/png"
+                                )
+                                horarios_extraidos = True
+                                break
+                    except Exception:
+                        continue
+
+            if not horarios_extraidos:
+                st.warning("Nenhuma coluna de horário foi encontrada no CSV enviado. Verifique se o arquivo possui a coluna de data/hora de atendimento.")
 
             st.markdown("---")
             st.subheader("Análise de Tipos de Ocorrências na Operação")
@@ -293,4 +339,4 @@ if uploaded_file is not None:
         st.error("Erro ao ler o arquivo CSV.")
 else:
     st.info("Aguardando o envio do arquivo CSV para iniciar o processamento...")
-                
+        
