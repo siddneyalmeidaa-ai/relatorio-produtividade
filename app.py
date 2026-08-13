@@ -15,12 +15,26 @@ if uploaded_file is not None:
     for enc in ['utf-8', 'latin1', 'cp1252', 'iso-8859-1']:
         try:
             uploaded_file.seek(0)
-            df = pd.read_csv(uploaded_file, sep=None, engine='python', encoding=enc)
+            df = pd.read_csv(uploaded_file, sep=None, engine='python', header=None, encoding=enc)
             break
         except Exception:
             continue
 
     if df is not None:
+        header_row_idx = None
+        for idx, row in df.iterrows():
+            row_str = " ".join(str(val) for val in row.values).lower()
+            if 'operador' in row_str:
+                header_row_idx = idx
+                break
+
+        if header_row_idx is not None:
+            df.columns = df.iloc[header_row_idx]
+            df = df.iloc[header_row_idx + 1:].reset_index(drop=True)
+        else:
+            df.columns = df.iloc[0]
+            df = df.iloc[1:].reset_index(drop=True)
+
         df.columns = [str(col).strip() for col in df.columns]
 
         coluna_op = None
@@ -146,9 +160,10 @@ if uploaded_file is not None:
                 mime="image/png"
             )
         else:
-            st.error(f"Colunas necessárias não encontradas. Colunas disponíveis: {list(df.columns)}")
+            st.error(f"Cabeçalho real não identificado. Linhas iniciais encontradas no arquivo.")
+            st.write(df.head(10))
     else:
         st.error("Erro ao ler o arquivo CSV.")
 else:
     st.info("Aguardando o envio do arquivo CSV para iniciar o processamento...")
-            
+        
