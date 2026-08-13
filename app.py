@@ -77,7 +77,8 @@ if uploaded_file is not None:
                 
                 valor = promessas * 209.69 if promessas > 0 else 0.0
                 ticket_medio = 209.69 if promessas > 0 else 0.0
-                conversao = (promessas / cpc * 100) if cpc > 0 else 0.0
+                
+                conversao = (promessas / cpca * 100) if cpca > 0 else 0.0
                 
                 op_str = str(op)
                 summary_data.append({
@@ -89,19 +90,23 @@ if uploaded_file is not None:
                     'PROMESSAS': promessas,
                     'VALOR': f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
                     'TICKET MÉDIO': f"R$ {ticket_medio:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
+                    'CONVERSAO_NUM': conversao,
                     'CONVERSÃO': f"{conversao:.1f}%"
                 })
 
             summary_df = pd.DataFrame(summary_data)
-            summary_df = summary_df.sort_values(by='CONTATO', ascending=False).reset_index(drop=True)
+            
+            summary_df = summary_df.sort_values(by=['CONVERSAO_NUM', 'PROMESSAS', 'CPCA', 'CONTATO'], ascending=[False, False, False, False]).reset_index(drop=True)
 
             total_contato = summary_df['CONTATO'].sum()
             total_cpc = summary_df['CPC'].sum()
             total_cpca = summary_df['CPCA'].sum()
             total_promessas = summary_df['PROMESSAS'].sum()
             total_valor = total_promessas * 209.69
-            total_conversao = (total_promessas / total_cpc * 100) if total_cpc > 0 else 0.0
+            total_conversao = (total_promessas / total_cpca * 100) if total_cpca > 0 else 0.0
 
+            cols_to_display = ['NOME', 'LOGIN', 'CONTATO', 'CPC', 'CPCA', 'PROMESSAS', 'VALOR', 'TICKET MÉDIO', 'CONVERSÃO']
+            
             total_row = {
                 'NOME': 'TOTAL',
                 'LOGIN': 'TOTAL',
@@ -110,41 +115,43 @@ if uploaded_file is not None:
                 'CPCA': total_cpca,
                 'PROMESSAS': total_promessas,
                 'VALOR': f"R$ {total_valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
-                'TICKET MÉDIO': f"R$ 209,69",
+                'TICKET MÉDIO': "R$ 209,69",
                 'CONVERSÃO': f"{total_conversao:.1f}%"
             }
 
-            summary_df = pd.concat([summary_df, pd.DataFrame([total_row])], ignore_index=True)
+            display_df = summary_df[cols_to_display].copy()
+            display_df = pd.concat([display_df, pd.DataFrame([total_row])], ignore_index=True)
 
             st.subheader("Visualização dos Dados Consolidados")
-            st.dataframe(summary_df, use_container_width=True)
+            st.dataframe(display_df, use_container_width=True)
 
-            fig, ax = plt.subplots(figsize=(16, len(summary_df) * 0.45 + 2), dpi=300)
+            fig, ax = plt.subplots(figsize=(16, len(display_df) * 0.45 + 2.5), dpi=300)
             ax.axis('off')
 
-            table = ax.table(cellText=summary_df.values, colLabels=summary_df.columns, loc='center', cellLoc='center')
+            table = ax.table(cellText=display_df.values, colLabels=display_df.columns, loc='center', cellLoc='center')
             table.auto_set_font_size(False)
             table.set_fontsize(9)
-            table.scale(1, 1.6)
+            table.scale(1, 1.8)
 
-            col_widths = [0.28, 0.10, 0.08, 0.08, 0.08, 0.09, 0.11, 0.11, 0.09]
+            col_widths = [0.26, 0.10, 0.08, 0.08, 0.08, 0.09, 0.12, 0.11, 0.08]
             for i, width in enumerate(col_widths):
-                for row in range(len(summary_df) + 1):
+                for row in range(len(display_df) + 1):
                     table[(row, i)].set_width(width)
 
             for k, cell in table.get_celld().items():
-                cell.set_edgecolor('#CCCCCC')
+                cell.set_edgecolor('#D1D5DB')
+                cell.set_linewidth(0.8)
                 if k[0] == 0:
-                    cell.set_facecolor('#3B1443')
-                    cell.set_text_props(color='white', weight='bold', fontsize=10)
-                elif k[0] == len(summary_df):
-                    cell.set_facecolor('#EAEAEA')
-                    cell.set_text_props(color='#111111', weight='bold', fontsize=9.5)
+                    cell.set_facecolor('#2D1B4E')
+                    cell.set_text_props(color='#FFFFFF', weight='bold', fontsize=10)
+                elif k[0] == len(display_df):
+                    cell.set_facecolor('#E2E8F0')
+                    cell.set_text_props(color='#0F172A', weight='bold', fontsize=9.5)
                 else:
-                    cell.set_facecolor('#F7F9FA' if k[0] % 2 == 0 else '#FFFFFF')
-                    cell.set_text_props(color='#333333', fontsize=9)
+                    cell.set_facecolor('#F8FAFC' if k[0] % 2 == 0 else '#FFFFFF')
+                    cell.set_text_props(color='#1E293B', fontsize=9)
 
-            plt.title('RELATÓRIO DE PRODUTIVIDADE POR OPERADOR - CONSOLIDADO', fontsize=14, weight='bold', pad=25, color='#222222')
+            plt.title('RELATÓRIO DE PRODUTIVIDADE POR OPERADOR - CONSOLIDADO', fontsize=15, weight='bold', pad=30, color='#1E293B')
             plt.tight_layout()
             
             st.pyplot(fig)
@@ -160,9 +167,9 @@ if uploaded_file is not None:
                 mime="image/png"
             )
         else:
-            st.error(f"Cabeçalho real não identificado.")
+            st.error("Cabeçalho real não identificado.")
     else:
         st.error("Erro ao ler o arquivo CSV.")
 else:
     st.info("Aguardando o envio do arquivo CSV para iniciar o processamento...")
-                    
+            
