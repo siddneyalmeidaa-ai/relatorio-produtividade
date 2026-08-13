@@ -55,6 +55,12 @@ if uploaded_file is not None:
                 coluna_ocorrencia = col
                 break
 
+        coluna_data = None
+        for col in df.columns:
+            if 'data' in col.lower() or 'hora' in col.lower() or 'time' in col.lower():
+                coluna_data = col
+                break
+
         if coluna_op and coluna_ocorrencia:
             df = df.dropna(subset=[coluna_op, coluna_ocorrencia])
             
@@ -128,6 +134,17 @@ if uploaded_file is not None:
                 kpi4.metric("Destaque em Promessas", melhor_op.split()[0])
             else:
                 kpi4.metric("Destaque em Promessas", "-")
+
+            st.markdown("---")
+
+            # Sugestão 1: Alerta Automático de Auditoria (Omissão/Sabotagem)
+            st.subheader("Auditoria de Operadores (Alto Contato e Zero Promessas)")
+            audit_df = summary_df[(summary_df['CONTATO'] > 20) & (summary_df['PROMESSAS'] == 0)]
+            if not audit_df.empty:
+                st.warning("Atenção: Os operadores abaixo realizaram alto volume de contatos, mas estão com zero promessas registradas hoje:")
+                st.dataframe(audit_df[['NOME', 'CONTATO', 'CPC', 'CONVERSÃO']], use_container_width=True, hide_index=True)
+            else:
+                st.success("Nenhum operador crítico detectado na auditoria de hoje.")
 
             st.markdown("---")
 
@@ -216,6 +233,35 @@ if uploaded_file is not None:
                 mime="image/png"
             )
 
+            # Sugestão 3: Análise de Turnos/Horários (se houver coluna de data/hora)
+            if coluna_data:
+                st.markdown("---")
+                st.subheader("Análise de Produtividade por Turno / Horário")
+                try:
+                    df['HORA_TEMP'] = pd.to_datetime(df[coluna_data], errors='coerce').dt.hour
+                    turno_counts = df.dropna(subset=['HORA_TEMP']).groupby(pd.cut(df['HORA_TEMP'], bins=[0, 12, 18, 24], labels=['Manhã (00h-12h)', 'Tarde (12h-18h)', 'Noite (18h-24h)'])).size()
+                    
+                    fig_turno, ax_turno = plt.subplots(figsize=(8, 3.5), dpi=300)
+                    turno_counts.plot(kind='bar', ax=ax_turno, color='#2D1B4E')
+                    ax_turno.set_title("Volume de Atendimentos por Período", fontsize=12, weight='bold', color='#1E293B')
+                    ax_turno.set_xlabel("")
+                    ax_turno.set_ylabel("Quantidade")
+                    plt.xticks(rotation=0)
+                    plt.tight_layout()
+                    st.pyplot(fig_turno)
+
+                    buf_turno = io.BytesIO()
+                    fig_turno.savefig(buf_turno, format="png", bbox_inches='tight')
+                    buf_turno.seek(0)
+                    st.download_button(
+                        label="Baixar Gráfico de Turnos em Imagem (PNG)",
+                        data=buf_turno,
+                        file_name=f"grafico_turnos_{data_str_file}.png",
+                        mime="image/png"
+                    )
+                except Exception:
+                    st.info("Não foi possível processar os horários automaticamente desta base.")
+
             st.markdown("---")
             st.subheader("Análise de Tipos de Ocorrências na Operação")
             
@@ -230,7 +276,6 @@ if uploaded_file is not None:
             
             st.pyplot(fig_occ)
 
-            # Botão de exportar imagem para o gráfico de ocorrências também
             buf_occ = io.BytesIO()
             fig_occ.savefig(buf_occ, format="png", bbox_inches='tight')
             buf_occ.seek(0)
@@ -248,4 +293,4 @@ if uploaded_file is not None:
         st.error("Erro ao ler o arquivo CSV.")
 else:
     st.info("Aguardando o envio do arquivo CSV para iniciar o processamento...")
-        
+                
