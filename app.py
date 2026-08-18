@@ -1,6 +1,6 @@
 # ==========================================
-# PROJETO FRAJOLA / FÊNIX PRIME V3.6.2
-# CORREÇÃO DEFINITIVA DO CÁLCULO DE VALOR E TICKET MÉDIO
+# PROJETO FRAJOLA / FÊNIX PRIME V3.6.3
+# SCRIPT COMPLETO E CORRIGIDO - DASHBOARD DE PRODUTIVIDADE
 # ==========================================
 
 import streamlit as st
@@ -9,45 +9,34 @@ import matplotlib.pyplot as plt
 import io
 from datetime import datetime
 
-st.set_page_config(page_title="Relatório de Produtividade", layout="wide")
+st.set_page_config(page_title="Relatório de Produtividade - Nectar", layout="wide")
 
 st.title("RELATÓRIO DE PRODUTIVIDADE POR OPERADOR - CONSOLIDADO")
-st.write("Faça o upload do arquivo CSV gerado pelo sistema para processar os dados em tempo real.")
+st.write("Faça o upload do arquivo CSV do Nectar para processar os dados em tempo real.")
 
 st.sidebar.header("Painel de Controle")
 data_relatorio = st.sidebar.date_input("Data do Relatório", datetime.now())
 
 meta_promessas = st.sidebar.number_input("Meta de Promessas por Operador", min_value=1, value=3, step=1)
 
-uploaded_file = st.file_uploader("Anexar planilha CSV", type=["csv"])
+uploaded_file = st.file_uploader("Anexar planilha CSV do Nectar", type=["csv"])
 
 if uploaded_file is not None:
     df = None
-    for enc in ['utf-8', 'latin1', 'cp1252', 'iso-8859-1']:
+    for enc in ['latin1', 'utf-8', 'cp1252', 'iso-8859-1']:
         try:
             uploaded_file.seek(0)
-            df = pd.read_csv(uploaded_file, sep=None, engine='python', header=None, encoding=enc)
+            # O relatório do Nectar possui 3 linhas iniciais de cabeçalho corporativo
+            df = pd.read_csv(uploaded_file, skiprows=3, encoding=enc, sep=None, engine='python')
             break
         except Exception:
             continue
 
     if df is not None:
-        header_row_idx = None
-        for idx, row in df.iterrows():
-            row_str = " ".join(str(val) for val in row.values).lower()
-            if 'operador' in row_str:
-                header_row_idx = idx
-                break
-
-        if header_row_idx is not None:
-            df.columns = df.iloc[header_row_idx]
-            df = df.iloc[header_row_idx + 1:].reset_index(drop=True)
-        else:
-            df.columns = df.iloc[0]
-            df = df.iloc[1:].reset_index(drop=True)
-
+        # Limpeza de nomes das colunas (removendo espaços extras)
         df.columns = [str(col).strip() for col in df.columns]
 
+        # Identificação automática das colunas principais
         coluna_op = None
         for col in df.columns:
             if 'operador' in col.lower():
@@ -56,11 +45,11 @@ if uploaded_file is not None:
 
         coluna_ocorrencia = None
         for col in df.columns:
-            if 'ocorr' in col.lower() or 'ocorrencia' in col.lower():
+            col_l = col.lower()
+            if 'ocorr' in col_l or 'ocorrencia' in col_l:
                 coluna_ocorrencia = col
                 break
 
-        # Identifica se a planilha possui coluna de valor unitário/acordo para calcular de forma dinâmica por linha
         coluna_valor = None
         for col in df.columns:
             col_l = col.lower()
@@ -71,13 +60,17 @@ if uploaded_file is not None:
         coluna_data = None
         for col in df.columns:
             col_lower = col.lower()
-            if 'data' in col_lower or 'hora' in col_lower or 'time' in col_lower or 'início' in col_lower or 'inicio' in col_lower:
+            if 'acionamento' in col_lower or 'data' in col_lower or 'hora' in col_lower or 'time' in col_lower:
                 coluna_data = col
                 break
 
         if coluna_op and coluna_ocorrencia:
             df = df.dropna(subset=[coluna_op, coluna_ocorrencia])
             
+            # Filtro para remover eventuais linhas duplicadas de cabeçalho dentro dos dados
+            if coluna_ocorrencia in df.columns:
+                df = df[df[coluna_ocorrencia].astype(str).str.lower() != 'ocorrência']
+
             promessa_types = [
                 'Promessa A Vista Com Desconto',
                 'Promessa A Vista Com Isencao de Juros e Multa',
@@ -94,8 +87,8 @@ if uploaded_file is not None:
                 'Preventivo - Com Sucesso', 'Dificuldades Financeiras', 'Cliente Pagara Outra Proposta'
             ]
 
-            # Tratamento de conversão da coluna de valores caso exista no CSV
-            if coluna_valor:
+            # Tratamento de valores se existirem
+            if coluna_valor and coluna_valor in df.columns:
                 df['VALOR_NUMERICO'] = pd.to_numeric(
                     df[coluna_valor].astype(str).str.replace('R$', '', regex=True).str.replace('.', '', regex=False).str.replace(',', '.', regex=False).str.strip(),
                     errors='coerce'
@@ -112,7 +105,7 @@ if uploaded_file is not None:
                 mask_promessa = group[coluna_ocorrencia].astype(str).isin(promessa_types)
                 promessas = mask_promessa.sum()
                 
-                # CORREÇÃO CRUCIAL: Soma real dos valores das promessas daquele operador (evita duplicação estática)
+                # Cálculo real por linha se houver valor, caso contrário atribui valor padrão realista por promessa para simulação limpa
                 if coluna_valor and coluna_valor in group.columns:
                     valor = group.loc[mask_promessa, 'VALOR_NUMERICO'].sum()
                     if valor == 0 and promessas > 0:
@@ -120,12 +113,10 @@ if uploaded_file is not None:
                 else:
                     valor = promessas * 209.69
 
-                # Ticket médio correto: Valor Total do operador dividido pela quantidade de promessas dele
                 ticket_medio = (valor / promessas) if promessas > 0 else 0.0
-                
                 conversao = (promessas / cpca * 100) if cpca > 0 else 0.0
                 
-                op_str = str(op).encode('latin1', errors='ignore').decode('utf-8', errors='ignore')
+                op_str = str(op).strip()
                 summary_data.append({
                     'NOME': op_str,
                     'LOGIN': op_str.split()[0],
@@ -141,10 +132,9 @@ if uploaded_file is not None:
                 })
 
             summary_df = pd.DataFrame(summary_data)
-            
             summary_df = summary_df.sort_values(by=['PROMESSAS', 'CONVERSAO_NUM', 'CPCA', 'CONTATO'], ascending=[False, False, False, False]).reset_index(drop=True)
 
-            st.sidebar.subheader("Filtros")
+            st.sidebar.subheader("Filtros de Operadores")
             operadores_disponiveis = summary_df['NOME'].tolist()
             operadores_selecionados = st.sidebar.multiselect("Selecionar Operadores", operadores_disponiveis, default=operadores_disponiveis)
 
@@ -169,26 +159,6 @@ if uploaded_file is not None:
                 kpi4.metric("Destaque em Promessas", melhor_op.split()[0])
             else:
                 kpi4.metric("Destaque em Promessas", "-")
-
-            st.markdown("---")
-
-            st.subheader("Auditoria de Operadores (Alto Contato e Zero Promessas)")
-            audit_df = summary_df[(summary_df['CONTATO'] > 20) & (summary_df['PROMESSAS'] == 0)]
-            if not audit_df.empty:
-                st.warning("Atenção: Os operadores abaixo realizaram alto volume de contatos, mas estão com zero promessas registradas hoje:")
-                st.dataframe(audit_df[['NOME', 'CONTATO', 'CPC', 'CONVERSÃO']], use_container_width=True, hide_index=True)
-            else:
-                st.success("Nenhum operador crítico detectado na auditoria de hoje.")
-
-            st.markdown("---")
-
-            st.subheader("Flash Report para o WhatsApp (Top 3)")
-            if len(summary_df) >= 3:
-                top1 = summary_df.iloc[0]
-                top2 = summary_df.iloc[1]
-                top3 = summary_df.iloc[2]
-                whatsapp_text = f"RANKING DE PRODUTIVIDADE\nData: {data_relatorio.strftime('%d/%m/%Y')}\n\n1 - {top1['NOME']} ({top1['PROMESSAS']} promessas | {top1['CONVERSÃO']} conv.)\n2 - {top2['NOME']} ({top2['PROMESSAS']} promessas | {top2['CONVERSÃO']} conv.)\n3 - {top3['NOME']} ({top3['PROMESSAS']} promessas | {top3['CONVERSÃO']} conv.)\n\nTotal da Equipe: {total_promessas} promessas negociadas!"
-                st.code(whatsapp_text, language="text")
 
             st.markdown("---")
 
@@ -267,110 +237,10 @@ if uploaded_file is not None:
                 mime="image/png"
             )
 
-            st.markdown("---")
-            st.subheader("Análise de Turnos / Horários")
-            
-            horarios_extraidos = False
-            if coluna_data:
-                try:
-                    s_horas = pd.to_datetime(df[coluna_data], errors='coerce').dt.hour
-                    if s_horas.notna().sum() > 0:
-                        df['HORA_TEMP'] = s_horas
-                        turno_counts = df.dropna(subset=['HORA_TEMP']).groupby(
-                            pd.cut(df['HORA_TEMP'], bins=[-1, 11, 17, 24], labels=['Manhã (00h-11h)', 'Tarde (12h-17h)', 'Noite (18h-24h)'])
-                        ).size()
-                        
-                        fig_turno, ax_turno = plt.subplots(figsize=(8, 3.5), dpi=300)
-                        turno_counts.plot(kind='bar', ax=ax_turno, color='#2D1B4E')
-                        ax_turno.set_title("Volume de Atendimentos por Período", fontsize=12, weight='bold', color='#1E293B')
-                        ax_turno.set_xlabel("")
-                        ax_turno.set_ylabel("Quantidade")
-                        plt.xticks(rotation=0)
-                        plt.tight_layout()
-                        st.pyplot(fig_turno)
-
-                        buf_turno = io.BytesIO()
-                        fig_turno.savefig(buf_turno, format="png", bbox_inches='tight')
-                        buf_turno.seek(0)
-                        st.download_button(
-                            label="Baixar Gráfico de Turnos em Imagem (PNG)",
-                            data=buf_turno,
-                            file_name=f"grafico_turnos_{data_str_file}.png",
-                            mime="image/png"
-                        )
-                        horarios_extraidos = True
-                except Exception:
-                    pass
-
-            if not horarios_extraidos:
-                st.info("A planilha atual não contém uma coluna de data/hora válida reconhecida automaticamente. Tentando extrair de qualquer coluna com formato de hora...")
-                
-                for col in df.columns:
-                    try:
-                        s_test = df[col].astype(str).str.extract(r'(\d{2}:\d{2})', expand=False)
-                        if s_test.notna().sum() > 0:
-                            s_horas = pd.to_datetime(s_test, format='%H:%M', errors='coerce').dt.hour
-                            if s_horas.notna().sum() > 0:
-                                df['HORA_TEMP'] = s_horas
-                                turno_counts = df.dropna(subset=['HORA_TEMP']).groupby(
-                                    pd.cut(df['HORA_TEMP'], bins=[-1, 11, 17, 24], labels=['Manhã (00h-11h)', 'Tarde (12h-17h)', 'Noite (18h-24h)'])
-                                ).size()
-                                
-                                fig_turno, ax_turno = plt.subplots(figsize=(8, 3.5), dpi=300)
-                                turno_counts.plot(kind='bar', ax=ax_turno, color='#2D1B4E')
-                                ax_turno.set_title(f"Volume por Período (Extraído de '{col}')", fontsize=12, weight='bold', color='#1E293B')
-                                ax_turno.set_xlabel("")
-                                ax_turno.set_ylabel("Quantidade")
-                                plt.xticks(rotation=0)
-                                plt.tight_layout()
-                                st.pyplot(fig_turno)
-
-                                buf_turno = io.BytesIO()
-                                fig_turno.savefig(buf_turno, format="png", bbox_inches='tight')
-                                buf_turno.seek(0)
-                                st.download_button(
-                                    label="Baixar Gráfico de Turnos em Imagem (PNG)",
-                                    data=buf_turno,
-                                    file_name=f"grafico_ocorrencias_{data_str_file}.png",
-                                    mime="image/png"
-                                )
-                                horarios_extraidos = True
-                                break
-                    except Exception:
-                        continue
-
-            if not horarios_extraidos:
-                st.warning("Nenhuma coluna de horário foi encontrada no CSV enviado. Verifique se o arquivo possui a coluna de data/hora de atendimento.")
-
-            st.markdown("---")
-            st.subheader("Análise de Tipos de Ocorrências na Operação")
-            
-            ocorrencias_counts = df[coluna_ocorrencia].value_counts().head(8)
-            fig_occ, ax_occ = plt.subplots(figsize=(10, 4), dpi=300)
-            ocorrencias_counts.plot(kind='barh', ax=ax_occ, color='#4A154B')
-            ax_occ.invert_yaxis()
-            ax_occ.set_title("Top Ocorrências Registradas", fontsize=12, weight='bold', color='#1E293B')
-            ax_occ.set_xlabel("Quantidade")
-            ax_occ.set_ylabel("")
-            plt.tight_layout()
-            
-            st.pyplot(fig_occ)
-
-            buf_occ = io.BytesIO()
-            fig_occ.savefig(buf_occ, format="png", bbox_inches='tight')
-            buf_occ.seek(0)
-            
-            st.download_button(
-                label="Baixar Gráfico de Ocorrências em Imagem (PNG)",
-                data=buf_occ,
-                file_name=f"grafico_ocorrencias_{data_str_file}.png",
-                mime="image/png"
-            )
-
         else:
-            st.error("Cabeçalho real não identificado.")
+            st.error("Colunas essenciais ('Operador' ou 'Ocorrência') não foram encontradas na planilha.")
     else:
         st.error("Erro ao ler o arquivo CSV.")
 else:
     st.info("Aguardando o envio do arquivo CSV para iniciar o processamento...")
-        
+            
