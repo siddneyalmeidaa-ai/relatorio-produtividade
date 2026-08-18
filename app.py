@@ -1,6 +1,6 @@
 # ==========================================
-# PROJETO FRAJOLA / FÊNIX PRIME V3.6.5
-# SCRIPT COMPLETO E BLINDADO CONTRA VALORES NULOS
+# PROJETO FRAJOLA / FÊNIX PRIME V3.6.6
+# SCRIPT COMPLETO E CORRIGIDO - CÁLCULOS EXATOS
 # ==========================================
 
 import streamlit as st
@@ -9,10 +9,10 @@ import matplotlib.pyplot as plt
 import io
 from datetime import datetime
 
-st.set_page_config(page_title="Relatório de Produtividade", layout="wide")
+st.set_page_config(page_title="Relatório de Produtividade - Nectar", layout="wide")
 
 st.title("RELATÓRIO DE PRODUTIVIDADE POR OPERADOR - CONSOLIDADO")
-st.write("Faça o upload da planilha (CSV ou XLSX) para processar os dados em tempo real.")
+st.write("Faça o upload da planilha para processar os dados exatos em tempo real.")
 
 st.sidebar.header("Painel de Controle")
 data_relatorio = st.sidebar.date_input("Data do Relatório", datetime.now())
@@ -84,14 +84,21 @@ if uploaded_file is not None:
 
         if coluna_op and coluna_ocorrencia:
             df = df.dropna(subset=[coluna_op])
-            
-            # Garante preenchimento seguro de nulos na coluna de ocorrência
             df[coluna_ocorrencia] = df[coluna_ocorrencia].fillna("").astype(str)
+
+            # Filtra linhas onde o operador não é um número ou lixo
+            df = df[~df[coluna_op].astype(str).str.replace('.', '', regex=False).str.replace(',', '', regex=False).str.isdigit()]
 
             promessa_types = [
                 'Promessa A Vista Com Desconto', 'Promessa A Vista Com Isencao de Juros e Multa',
                 'Promessa A Vista Sem Desconto', 'Parcelamento Com Desconto',
                 'Parcelamento Com Desconto e Isencao de Juros e Mul', 'Promessa'
+            ]
+
+            cpc_types = promessa_types + [
+                'Alega Pagamento', 'Sem Previsao de Pagamento', 'Retorno Agendado Indireto', 
+                'Retorno Agendado Direto', 'Preventivo - Com Sucesso', 'Dificuldades Financeiras', 
+                'Cliente Pagara Outra Proposta', 'Contato Com Sucesso', 'CPC'
             ]
 
             if coluna_valor and coluna_valor in df.columns:
@@ -106,24 +113,30 @@ if uploaded_file is not None:
             for op, group in df.groupby(coluna_op):
                 contato = len(group)
                 
-                # Tratamento seguro contra nulos por linha
                 cpc = group[coluna_ocorrencia].apply(lambda x: any(p.lower() in x.lower() for p in ['cpc', 'promessa', 'sucesso', 'alega', 'agendado', 'pagara']) if x else False).sum()
                 mask_promessa = group[coluna_ocorrencia].apply(lambda x: any(p.lower() in x.lower() for p in ['promessa', 'acordo', 'parcelamento']) if x else False)
                 promessas = mask_promessa.sum()
+                
+                # CPCA real contado estritamente das ocorrências válidas
                 cpca = group[coluna_ocorrencia].apply(lambda x: any(p.lower() in x.lower() for p in ['promessa', 'alega', 'sucesso']) if x else False).sum()
-
-                if promessas == 0 and contato > 5:
-                    promessas = max(1, int(contato * 0.05))
+                if cpca < promessas:
+                    cpca = promessas
 
                 if coluna_valor and coluna_valor in group.columns:
                     valor = group.loc[mask_promessa, 'VALOR_NUMERICO'].sum()
-                    if valor == 0 and promessas > 0:
-                        valor = promessas * 209.69
                 else:
-                    valor = promessas * 209.69
+                    valor = 0.0
 
                 ticket_medio = (valor / promessas) if promessas > 0 else 0.0
-                conversao = (promessas / cpca * 100) if cpca > 0 else 0.0
+                
+                # Correção exata da conversão: se promessas >= cpca e cpca > 0, conversão é 100%
+                if cpca > 0:
+                    if promessas >= cpca:
+                        conversao = 100.0
+                    else:
+                        conversao = (promessas / cpca * 100)
+                else:
+                    conversao = 0.0
                 
                 op_str = str(op).strip()
                 summary_data.append({
@@ -131,7 +144,7 @@ if uploaded_file is not None:
                     'LOGIN': op_str.split()[0],
                     'CONTATO': contato,
                     'CPC': max(cpc, promessas),
-                    'CPCA': max(cpca, promessas),
+                    'CPCA': cpca,
                     'PROMESSAS': promessas,
                     'VALOR_NUM': valor,
                     'VALOR': f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
@@ -156,7 +169,11 @@ if uploaded_file is not None:
             total_promessas = summary_df['PROMESSAS'].sum()
             total_valor = summary_df['VALOR_NUM'].sum()
             total_ticket_medio_geral = (total_valor / total_promessas) if total_promessas > 0 else 0.0
-            total_conversao = (total_promessas / total_cpca * 100) if total_cpca > 0 else 0.0
+            
+            if total_cpca > 0:
+                total_conversao = 100.0 if total_promessas >= total_cpca else (total_promessas / total_cpca * 100)
+            else:
+                total_conversao = 0.0
 
             st.markdown("### Indicadores Gerais")
             kpi1, kpi2, kpi3, kpi4 = st.columns(4)
