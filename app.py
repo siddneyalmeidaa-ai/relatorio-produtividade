@@ -1,6 +1,6 @@
 # ==========================================
-# PROJETO FRAJOLA / FÊNIX PRIME V3.6.4
-# SCRIPT COMPLETO E BLINDADO - DETECÇÃO AUTOMÁTICA DE COLUNAS
+# PROJETO FRAJOLA / FÊNIX PRIME V3.6.5
+# SCRIPT COMPLETO E BLINDADO CONTRA VALORES NULOS
 # ==========================================
 
 import streamlit as st
@@ -25,7 +25,6 @@ if uploaded_file is not None:
     df = None
     file_name = uploaded_file.name.lower()
     
-    # Leitura inteligente baseada na extensão
     if file_name.endswith(('.xlsx', '.xls')):
         try:
             df = pd.read_excel(uploaded_file, header=None)
@@ -35,32 +34,27 @@ if uploaded_file is not None:
         for enc in ['latin1', 'utf-8', 'cp1252', 'iso-8859-1']:
             try:
                 uploaded_file.seek(0)
-                # Tenta ler sem pular inicialmente para varredura
                 df = pd.read_csv(uploaded_file, encoding=enc, sep=None, engine='python', header=None)
                 break
             except Exception:
                 continue
 
     if df is not None:
-        # Varredura automática para encontrar a linha de cabeçalho real que contenha 'operador', 'usuario', 'nome' ou 'ocorrência'
         header_row_idx = 0
         for idx, row in df.iterrows():
             row_str = " ".join(str(val) for val in row.values).lower()
-            if 'operador' in row_str or 'usuário' in row_str or 'usuario' in row_str or 'ocorr' in row_str:
+            if 'operador' in row_str or 'usuario' in row_str or 'usuário' in row_str or 'ocorr' in row_str:
                 header_row_idx = idx
                 break
 
-        # Reatribui o cabeçalho correto e limpa o DataFrame
         if file_name.endswith(('.xlsx', '.xls')):
             df = pd.read_excel(uploaded_file, header=header_row_idx)
         else:
             uploaded_file.seek(0)
             df = pd.read_csv(uploaded_file, encoding='latin1', sep=None, engine='python', skiprows=header_row_idx)
 
-        # Padroniza nomes das colunas
         df.columns = [str(col).strip() for col in df.columns]
 
-        # Mapeamento flexível de colunas essenciais
         coluna_op = None
         for col in df.columns:
             col_l = col.lower()
@@ -82,30 +76,24 @@ if uploaded_file is not None:
                 coluna_valor = col
                 break
 
-        # Se não achar operador explicitamente, pega a segunda ou primeira coluna com texto
         if not coluna_op and len(df.columns) > 1:
             coluna_op = df.columns[1] if len(df.columns) > 1 else df.columns[0]
         
-        # Se não achar ocorrência, pega a última coluna de texto ou similar
         if not coluna_ocorrencia and len(df.columns) > 2:
             coluna_ocorrencia = df.columns[8] if len(df.columns) > 8 else df.columns[-1]
 
         if coluna_op and coluna_ocorrencia:
             df = df.dropna(subset=[coluna_op])
             
+            # Garante preenchimento seguro de nulos na coluna de ocorrência
+            df[coluna_ocorrencia] = df[coluna_ocorrencia].fillna("").astype(str)
+
             promessa_types = [
                 'Promessa A Vista Com Desconto', 'Promessa A Vista Com Isencao de Juros e Multa',
                 'Promessa A Vista Sem Desconto', 'Parcelamento Com Desconto',
                 'Parcelamento Com Desconto e Isencao de Juros e Mul', 'Promessa'
             ]
 
-            cpc_types = promessa_types + [
-                'Alega Pagamento', 'Sem Previsao de Pagamento', 'Retorno Agendado Indireto', 
-                'Retorno Agendado Direto', 'Preventivo - Com Sucesso', 'Dificuldades Financeiras', 
-                'Cliente Pagara Outra Proposta', 'Contato Com Sucesso', 'CPC'
-            ]
-
-            # Tratamento numérico de valores
             if coluna_valor and coluna_valor in df.columns:
                 df['VALOR_NUMERICO'] = pd.to_numeric(
                     df[coluna_valor].astype(str).str.replace('R$', '', regex=True).str.replace('.', '', regex=False).str.replace(',', '.', regex=False).str.strip(),
@@ -118,22 +106,17 @@ if uploaded_file is not None:
             for op, group in df.groupby(coluna_op):
                 contato = len(group)
                 
-                # Verifica ocorrências de forma abrangente
-                if coluna_ocorrencia in group.columns:
-                    cpc = group[coluna_ocorrencia].astype(str).apply(lambda x: any(p.lower() in x.lower() for p in ['cpc', 'promessa', 'sucesso', 'alega', 'agendado', 'pagara'])).sum()
-                    mask_promessa = group[coluna_ocorrencia].astype(str).apply(lambda x: any(p.lower() in x.lower() for p in ['promessa', 'acordo', 'parcelamento']))
-                    promessas = mask_promessa.sum()
-                    cpca = group[coluna_ocorrencia].astype(str).apply(lambda x: any(p.lower() in x.lower() for p in ['promessa', 'alega', 'sucesso'])).sum()
-                else:
-                    cpc = contato
-                    promessas = max(1, int(contato * 0.1))
-                    cpca = promessas
+                # Tratamento seguro contra nulos por linha
+                cpc = group[coluna_ocorrencia].apply(lambda x: any(p.lower() in x.lower() for p in ['cpc', 'promessa', 'sucesso', 'alega', 'agendado', 'pagara']) if x else False).sum()
+                mask_promessa = group[coluna_ocorrencia].apply(lambda x: any(p.lower() in x.lower() for p in ['promessa', 'acordo', 'parcelamento']) if x else False)
+                promessas = mask_promessa.sum()
+                cpca = group[coluna_ocorrencia].apply(lambda x: any(p.lower() in x.lower() for p in ['promessa', 'alega', 'sucesso']) if x else False).sum()
 
                 if promessas == 0 and contato > 5:
                     promessas = max(1, int(contato * 0.05))
 
                 if coluna_valor and coluna_valor in group.columns:
-                    valor = group.loc[mask_promessa, 'VALOR_NUMERICO'].sum() if 'mask_promessa' in locals() else 0.0
+                    valor = group.loc[mask_promessa, 'VALOR_NUMERICO'].sum()
                     if valor == 0 and promessas > 0:
                         valor = promessas * 209.69
                 else:
@@ -264,9 +247,9 @@ if uploaded_file is not None:
             )
 
         else:
-            st.error("Não foi possível identificar automaticamente as colunas de operador ou ocorrência nesta planilha. Verifique o formato do arquivo.")
+            st.error("Não foi possível identificar automaticamente as colunas de operador ou ocorrência nesta planilha.")
     else:
         st.error("Erro ao ler o arquivo enviado.")
 else:
     st.info("Aguardando o envio do arquivo para iniciar o processamento...")
-                    
+            
