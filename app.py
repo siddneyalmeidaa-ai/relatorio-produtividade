@@ -1,6 +1,6 @@
 # ==========================================
 # PROJETO FRAJOLA / FÊNIX PRIME V3.6.2
-# SCRIPT CORRIGIDO - TICKET MÉDIO E VALORES
+# CORREÇÃO DEFINITIVA DO CÁLCULO DE VALOR E TICKET MÉDIO
 # ==========================================
 
 import streamlit as st
@@ -60,6 +60,14 @@ if uploaded_file is not None:
                 coluna_ocorrencia = col
                 break
 
+        # Identifica se a planilha possui coluna de valor unitário/acordo para calcular de forma dinâmica por linha
+        coluna_valor = None
+        for col in df.columns:
+            col_l = col.lower()
+            if 'valor' in col_l or 'vlr' in col_l or 'importe' in col_l or 'acordo' in col_l:
+                coluna_valor = col
+                break
+
         coluna_data = None
         for col in df.columns:
             col_lower = col.lower()
@@ -86,15 +94,33 @@ if uploaded_file is not None:
                 'Preventivo - Com Sucesso', 'Dificuldades Financeiras', 'Cliente Pagara Outra Proposta'
             ]
 
+            # Tratamento de conversão da coluna de valores caso exista no CSV
+            if coluna_valor:
+                df['VALOR_NUMERICO'] = pd.to_numeric(
+                    df[coluna_valor].astype(str).str.replace('R$', '', regex=True).str.replace('.', '', regex=False).str.replace(',', '.', regex=False).str.strip(),
+                    errors='coerce'
+                ).fillna(0.0)
+            else:
+                df['VALOR_NUMERICO'] = 0.0
+
             summary_data = []
             for op, group in df.groupby(coluna_op):
                 contato = len(group)
                 cpc = group[coluna_ocorrencia].astype(str).isin(cpc_types).sum()
                 cpca = group[coluna_ocorrencia].astype(str).isin(promessa_types + ['Alega Pagamento', 'Preventivo - Com Sucesso']).sum()
-                promessas = group[coluna_ocorrencia].astype(str).isin(promessa_types).sum()
                 
-                # CORREÇÃO APLICADA: Valor Acumulado dinâmico e Ticket Médio correto (Valor / Promessas)
-                valor = promessas * 209.69 if promessas > 0 else 0.0
+                mask_promessa = group[coluna_ocorrencia].astype(str).isin(promessa_types)
+                promessas = mask_promessa.sum()
+                
+                # CORREÇÃO CRUCIAL: Soma real dos valores das promessas daquele operador (evita duplicação estática)
+                if coluna_valor and coluna_valor in group.columns:
+                    valor = group.loc[mask_promessa, 'VALOR_NUMERICO'].sum()
+                    if valor == 0 and promessas > 0:
+                        valor = promessas * 209.69
+                else:
+                    valor = promessas * 209.69
+
+                # Ticket médio correto: Valor Total do operador dividido pela quantidade de promessas dele
                 ticket_medio = (valor / promessas) if promessas > 0 else 0.0
                 
                 conversao = (promessas / cpca * 100) if cpca > 0 else 0.0
@@ -107,6 +133,7 @@ if uploaded_file is not None:
                     'CPC': cpc,
                     'CPCA': cpca,
                     'PROMESSAS': promessas,
+                    'VALOR_NUM': valor,
                     'VALOR': f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
                     'TICKET MÉDIO': f"R$ {ticket_medio:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
                     'CONVERSAO_NUM': conversao,
@@ -128,7 +155,7 @@ if uploaded_file is not None:
             total_cpc = summary_df['CPC'].sum()
             total_cpca = summary_df['CPCA'].sum()
             total_promessas = summary_df['PROMESSAS'].sum()
-            total_valor = total_promessas * 209.69
+            total_valor = summary_df['VALOR_NUM'].sum()
             total_ticket_medio_geral = (total_valor / total_promessas) if total_promessas > 0 else 0.0
             total_conversao = (total_promessas / total_cpca * 100) if total_cpca > 0 else 0.0
 
@@ -304,7 +331,7 @@ if uploaded_file is not None:
                                 st.download_button(
                                     label="Baixar Gráfico de Turnos em Imagem (PNG)",
                                     data=buf_turno,
-                                    file_name=f"grafico_turnos_{data_str_file}.png",
+                                    file_name=f"grafico_ocorrencias_{data_str_file}.png",
                                     mime="image/png"
                                 )
                                 horarios_extraidos = True
@@ -346,4 +373,4 @@ if uploaded_file is not None:
         st.error("Erro ao ler o arquivo CSV.")
 else:
     st.info("Aguardando o envio do arquivo CSV para iniciar o processamento...")
-                                   
+        
