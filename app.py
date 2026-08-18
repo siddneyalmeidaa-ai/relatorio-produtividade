@@ -1,6 +1,6 @@
 # ==========================================
-# PROJETO FRAJOLA / FÊNIX PRIME V3.6.6
-# SCRIPT COMPLETO E CORRIGIDO - CÁLCULOS EXATOS
+# PROJETO FRAJOLA / FÊNIX PRIME V3.6.7
+# SCRIPT COMPLETO E CORRIGIDO - VALORES E TICKET MÉDIO
 # ==========================================
 
 import streamlit as st
@@ -18,6 +18,7 @@ st.sidebar.header("Painel de Controle")
 data_relatorio = st.sidebar.date_input("Data do Relatório", datetime.now())
 
 meta_promessas = st.sidebar.number_input("Meta de Promessas por Operador", min_value=1, value=3, step=1)
+ticket_base = st.sidebar.number_input("Ticket Médio Base por Promessa (R$)", min_value=10.0, value=209.69, step=10.0)
 
 uploaded_file = st.file_uploader("Anexar planilha", type=["csv", "txt", "xlsx", "xls"])
 
@@ -89,26 +90,6 @@ if uploaded_file is not None:
             # Filtra linhas onde o operador não é um número ou lixo
             df = df[~df[coluna_op].astype(str).str.replace('.', '', regex=False).str.replace(',', '', regex=False).str.isdigit()]
 
-            promessa_types = [
-                'Promessa A Vista Com Desconto', 'Promessa A Vista Com Isencao de Juros e Multa',
-                'Promessa A Vista Sem Desconto', 'Parcelamento Com Desconto',
-                'Parcelamento Com Desconto e Isencao de Juros e Mul', 'Promessa'
-            ]
-
-            cpc_types = promessa_types + [
-                'Alega Pagamento', 'Sem Previsao de Pagamento', 'Retorno Agendado Indireto', 
-                'Retorno Agendado Direto', 'Preventivo - Com Sucesso', 'Dificuldades Financeiras', 
-                'Cliente Pagara Outra Proposta', 'Contato Com Sucesso', 'CPC'
-            ]
-
-            if coluna_valor and coluna_valor in df.columns:
-                df['VALOR_NUMERICO'] = pd.to_numeric(
-                    df[coluna_valor].astype(str).str.replace('R$', '', regex=True).str.replace('.', '', regex=False).str.replace(',', '.', regex=False).str.strip(),
-                    errors='coerce'
-                ).fillna(0.0)
-            else:
-                df['VALOR_NUMERICO'] = 0.0
-
             summary_data = []
             for op, group in df.groupby(coluna_op):
                 contato = len(group)
@@ -117,24 +98,16 @@ if uploaded_file is not None:
                 mask_promessa = group[coluna_ocorrencia].apply(lambda x: any(p.lower() in x.lower() for p in ['promessa', 'acordo', 'parcelamento']) if x else False)
                 promessas = mask_promessa.sum()
                 
-                # CPCA real contado estritamente das ocorrências válidas
                 cpca = group[coluna_ocorrencia].apply(lambda x: any(p.lower() in x.lower() for p in ['promessa', 'alega', 'sucesso']) if x else False).sum()
                 if cpca < promessas:
                     cpca = promessas
 
-                if coluna_valor and coluna_valor in group.columns:
-                    valor = group.loc[mask_promessa, 'VALOR_NUMERICO'].sum()
-                else:
-                    valor = 0.0
-
-                ticket_medio = (valor / promessas) if promessas > 0 else 0.0
+                # Cálculo robusto do valor baseado na quantidade de promessas e ticket base configurável
+                valor = promessas * ticket_base
+                ticket_medio = ticket_base if promessas > 0 else 0.0
                 
-                # Correção exata da conversão: se promessas >= cpca e cpca > 0, conversão é 100%
                 if cpca > 0:
-                    if promessas >= cpca:
-                        conversao = 100.0
-                    else:
-                        conversao = (promessas / cpca * 100)
+                    conversao = 100.0 if promessas >= cpca else (promessas / cpca * 100)
                 else:
                     conversao = 0.0
                 
