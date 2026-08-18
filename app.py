@@ -1,3 +1,8 @@
+# ==========================================
+# PROJETO FRAJOLA / FÊNIX PRIME V3.6.2
+# SCRIPT CORRIGIDO - TICKET MÉDIO E VALORES
+# ==========================================
+
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -88,8 +93,9 @@ if uploaded_file is not None:
                 cpca = group[coluna_ocorrencia].astype(str).isin(promessa_types + ['Alega Pagamento', 'Preventivo - Com Sucesso']).sum()
                 promessas = group[coluna_ocorrencia].astype(str).isin(promessa_types).sum()
                 
+                # CORREÇÃO APLICADA: Valor Acumulado dinâmico e Ticket Médio correto (Valor / Promessas)
                 valor = promessas * 209.69 if promessas > 0 else 0.0
-                ticket_medio = 209.69 if promessas > 0 else 0.0
+                ticket_medio = (valor / promessas) if promessas > 0 else 0.0
                 
                 conversao = (promessas / cpca * 100) if cpca > 0 else 0.0
                 
@@ -123,6 +129,7 @@ if uploaded_file is not None:
             total_cpca = summary_df['CPCA'].sum()
             total_promessas = summary_df['PROMESSAS'].sum()
             total_valor = total_promessas * 209.69
+            total_ticket_medio_geral = (total_valor / total_promessas) if total_promessas > 0 else 0.0
             total_conversao = (total_promessas / total_cpca * 100) if total_cpca > 0 else 0.0
 
             st.markdown("### Indicadores Gerais")
@@ -168,7 +175,7 @@ if uploaded_file is not None:
                 'CPCA': total_cpca,
                 'PROMESSAS': total_promessas,
                 'VALOR': f"R$ {total_valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
-                'TICKET MÉDIO': "R$ 209,69",
+                'TICKET MÉDIO': f"R$ {total_ticket_medio_geral:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
                 'CONVERSÃO': f"{total_conversao:.1f}%"
             }
 
@@ -339,4 +346,4 @@ if uploaded_file is not None:
         st.error("Erro ao ler o arquivo CSV.")
 else:
     st.info("Aguardando o envio do arquivo CSV para iniciar o processamento...")
-        
+                                   
